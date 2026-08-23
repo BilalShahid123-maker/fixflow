@@ -1,5 +1,7 @@
 <?php
 
+use App\Enums\ActionStatus;
+use App\Enums\ApprovalStatus;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -36,7 +38,7 @@ return new class extends Migration
             $table->string('subject_type')->nullable();
             $table->unsignedBigInteger('subject_id')->nullable();
             $table->json('payload')->nullable();
-            $table->string('status')->default(\App\Enums\ActionStatus::Proposed->value)->index();
+            $table->string('status')->default(ActionStatus::Proposed->value)->index();
             $table->timestamps();
 
             $table->index(['subject_type', 'subject_id']);
@@ -47,7 +49,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('ai_action_id')->constrained()->cascadeOnDelete();
             $table->foreignId('approver_id')->nullable()->constrained('users')->nullOnDelete();
-            $table->string('status')->default(\App\Enums\ApprovalStatus::Pending->value);
+            $table->string('status')->default(ApprovalStatus::Pending->value);
             $table->text('note')->nullable();
             $table->timestamp('decided_at')->nullable();
             $table->timestamps();

@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\WorkOrderStatus;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -47,7 +48,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('maintenance_request_id')->constrained()->cascadeOnDelete();
             $table->foreignId('contractor_id')->constrained()->restrictOnDelete();
-            $table->string('status')->default(\App\Enums\WorkOrderStatus::Draft->value)->index();
+            $table->string('status')->default(WorkOrderStatus::Draft->value)->index();
             $table->unsignedInteger('estimated_cost_cents')->nullable();
             $table->unsignedInteger('final_cost_cents')->nullable();
             $table->timestamp('scheduled_for')->nullable();

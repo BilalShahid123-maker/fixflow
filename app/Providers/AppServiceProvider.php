@@ -13,7 +13,7 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->app->bind(TriageAgent::class, function () {
             return match (config('fixflow.triage.driver')) {
-                'fake' => new FakeTriageAgent(),
+                'fake' => new FakeTriageAgent,
                 default => throw new InvalidArgumentException(
                     'Unsupported triage driver ['.config('fixflow.triage.driver').'].',
                 ),

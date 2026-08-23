@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\RequestStatus;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -14,7 +15,7 @@ return new class extends Migration
             $table->foreignId('tenant_id')->nullable()->constrained()->nullOnDelete();
             $table->string('title');
             $table->text('description');
-            $table->string('status')->default(\App\Enums\RequestStatus::PendingTriage->value)->index();
+            $table->string('status')->default(RequestStatus::PendingTriage->value)->index();
             $table->string('category')->nullable()->index();
             $table->string('severity')->nullable()->index();
             $table->decimal('confidence', 5, 4)->nullable();
