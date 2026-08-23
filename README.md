@@ -1,59 +1,100 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# FixFlow
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+AI-assisted maintenance triage and dispatch for property managers, built with Laravel.
 
-## About Laravel
+A property manager with 200 units receives tenant requests all day: "water leaking under the sink", "smoke coming from the outlet", "AC stopped working". Triage is manual, slow and inconsistent. FixFlow classifies each request (category, severity, confidence), routes low-confidence cases to human review, and prepares contractor dispatches that a human approves before anything executes.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+**The AI never sends anyone or spends money on its own.**
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Problem statement
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+Small and mid-size property managers handle maintenance through phone calls, texts and spreadsheets:
 
-## Learning Laravel
+- Urgent issues sit in an inbox next to cosmetic ones
+- Contractors get dispatched without cost context
+- Nobody can answer "why was this decision made?" six weeks later
+- Tenants re-explain the same problem three times to three people
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+FixFlow turns that into a single auditable pipeline:
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+```
+Tenant request ─▶ Queued triage agent ─▶ Structured result + confidence
+                                              │
+                    confidence ≥ auto-route min ─▶ Triaged (ready for dispatch prep)
+                    confidence < auto-route min ─▶ AwaitingApproval (human review queue)
+```
 
-## Laravel Sponsors
+Every run persists input, output, latency and cost (`ai_runs`); every consequential action passes a deterministic permission gate (`PermissionGate`) and lands in an immutable audit trail (`audit_logs`).
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+## Bounded agent authority (the core design idea)
 
-### Premium Partners
+LLM output is treated as **untrusted input**. Authority levels are enforced in PHP — never in the prompt:
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+| Level | Name | Agent may | Enforced by |
+|---|---|---|---|
+| 0 | Read | read requests, search knowledge base | Policies |
+| 1 | Recommend | classify, estimate cost, draft messages | `TriageAgent` contract returns DTOs only |
+| 2 | Prepare | create draft work orders / dispatch proposals | `PermissionGate::evaluate()` |
+| 3 | Execute | schedule, send, spend money | auto-approval rules, else human approval |
 
-## Contributing
+Auto-execution requires **all** of: confidence ≥ `auto_route_min`, estimated cost ≤ `auto_execute_cost_limit_cents`, contractor verified, severity < critical. Any failure → `NeedsApproval` with explicit reasons attached to the decision.
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+## Architecture
 
-## Code of Conduct
+```
+app/
+├── AI/
+│   ├── Agents/FakeTriageAgent.php    deterministic driver, zero API keys needed
+│   ├── Contracts/TriageAgent.php     swap in a real LLM driver behind one interface
+│   ├── Dto/                          TriageResult, DispatchProposal (readonly)
+│   └── Permissions/                  PermissionGate + PermissionDecision
+├── Enums/                            RequestStatus, Severity, IssueCategory,
+│                                     ActionStatus, ApprovalStatus, AuthorityLevel
+├── Jobs/ProcessMaintenanceRequest.php queued triage with retries + idempotency
+└── Models/                           Property, Unit, Tenant, MaintenanceRequest,
+                                      WorkOrder, Contractor*, Knowledge*,
+                                      AiRun, AiAction, Approval, AuditLog
+config/fixflow.php                     thresholds live here, not in prompts
+```
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+Key decisions baked into the skeleton:
 
-## Security Vulnerabilities
+- **Idempotent jobs** — `ShouldBeUnique` per request + status guard, so a retried job can never double-triage
+- **Failure visibility** — exhausted retries flip the run to failed *and* write `ai.triage.exhausted_retries` to the audit log; the request stays pending for reprocessing
+- **Cost telemetry from day one** — every `ai_run` stores tokens, latency and cost so the eval dashboard later has real data
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+## Testing
+
+The pipeline runs entirely offline via the fake driver:
+
+```bash
+php artisan test
+```
+
+Covers: automatic routing of confident triages, human-review routing of vague ones, retry idempotency, and all four permission-gate branches (execute granted, cost limit, critical severity, unverified contractor).
+
+## Roadmap
+
+- [x] Week 1–2 — domain schema, models, enums, queued triage pipeline, permission gate
+- [ ] Week 3 — real LLM driver behind the `TriageAgent` contract (structured output + confidence)
+- [ ] Week 4 — manager dashboard (Filament): review queue, approve/reject/modify
+- [ ] Week 5 — knowledge base + embeddings + RAG answers with citations
+- [ ] Week 6–7 — contractor matching tools + work order dispatch flow
+- [ ] Week 8 — evaluation suite: labeled dataset, accuracy/severity/critical-recall metrics
+- [ ] Week 9 — security pass, failure-mode documentation, cost dashboard
+- [ ] Week 10 — deployment, demo video, MCP server exposure
+
+## Decision log
+
+| # | Decision | Why |
+|---|---|---|
+| 1 | Deterministic fake triage driver first, LLM second | The whole pipeline is testable in CI without keys; the LLM becomes a swappable implementation detail |
+| 2 | Permission levels enforced in PHP, not prompts | Prompt-based guardrails are suggestions; code-based ones are guarantees |
+| 3 | Confidence threshold routing instead of binary classify | Mirrors how a real team works: sure things flow, unsure things wait for a human |
+| 4 | SQLite for dev, schema kept portable | Zero-setup local dev; no vendor-specific column types yet |
+| 5 | Audit log as append-only table without updated_at | "Why did the system do this?" must have one truthful answer |
+| 6 | Laravel over Python for the app layer | The product is a transactional SaaS (auth, workflows, queues, consistency) where Laravel is strong; AI is one component of it |
 
 ## License
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+MIT
