@@ -13,6 +13,7 @@ readonly class TriageResult
         public float $confidence,
         public bool $isEmergency,
         public string $reasoning,
+        public ?array $meta = null,
     ) {}
 
     public function toArray(): array
@@ -23,6 +24,7 @@ readonly class TriageResult
             'confidence' => $this->confidence,
             'is_emergency' => $this->isEmergency,
             'reasoning' => $this->reasoning,
+            'meta' => $this->meta,
         ];
     }
 }

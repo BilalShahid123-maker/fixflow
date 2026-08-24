@@ -76,7 +76,7 @@ Covers: automatic routing of confident triages, human-review routing of vague on
 ## Roadmap
 
 - [x] Week 1–2 — domain schema, models, enums, queued triage pipeline, permission gate
-- [ ] Week 3 — real LLM driver behind the `TriageAgent` contract (structured output + confidence)
+- [x] Week 3 — real LLM driver behind the `TriageAgent` contract (Prism PHP, structured output + confidence clamping)
 - [ ] Week 4 — manager dashboard (Filament): review queue, approve/reject/modify
 - [ ] Week 5 — knowledge base + embeddings + RAG answers with citations
 - [ ] Week 6–7 — contractor matching tools + work order dispatch flow
@@ -94,6 +94,9 @@ Covers: automatic routing of confident triages, human-review routing of vague on
 | 4 | SQLite for dev, schema kept portable | Zero-setup local dev; no vendor-specific column types yet |
 | 5 | Audit log as append-only table without updated_at | "Why did the system do this?" must have one truthful answer |
 | 6 | Laravel over Python for the app layer | The product is a transactional SaaS (auth, workflows, queues, consistency) where Laravel is strong; AI is one component of it |
+| 7 | Prism PHP as the LLM layer | Official `laravel/ai` SDK requires newer PHP than this environment; Prism is battle-tested, provider-swappable, and its structured-output API maps cleanly onto our `TriageAgent` DTO contract |
+| 8 | LLM output defensively parsed (enum `tryFrom`, confidence clamped to ≤0.97) | The model can hallucinate enum values or overclaim certainty; the driver treats model output like untrusted input |
+| 9 | Token usage flows through `TriageResult->meta`, cost estimated per million-token rates in config | Cost telemetry belongs in `ai_runs` from day one, not retrofitted later |
 
 ## License
 

@@ -12,6 +12,18 @@ return [
         ],
     ],
 
+    'llm' => [
+
+        'provider' => env('FIXFLOW_LLM_PROVIDER', 'anthropic'),
+
+        'model' => env('FIXFLOW_LLM_MODEL', 'claude-sonnet-4-5'),
+
+        'cost_per_million_tokens' => [
+            'input' => (float) env('FIXFLOW_COST_INPUT_PER_M', 3.0),
+            'output' => (float) env('FIXFLOW_COST_OUTPUT_PER_M', 15.0),
+        ],
+    ],
+
     'dispatch' => [
 
         'auto_execute_cost_limit_cents' => (int) env('FIXFLOW_AUTO_COST_LIMIT_CENTS', 30000),

@@ -72,6 +72,11 @@ class ProcessMaintenanceRequest implements ShouldBeUnique, ShouldQueue
             $run->markSucceeded(
                 output: $result->toArray(),
                 latencyMs: $latencyMs,
+                inputTokens: $result->meta['input_tokens'] ?? 0,
+                outputTokens: $result->meta['output_tokens'] ?? 0,
+                costUsd: isset($result->meta['input_tokens'])
+                    ? $this->estimateCostUsd($result->meta)
+                    : null,
             );
 
             AuditLog::record(
@@ -121,5 +126,15 @@ class ProcessMaintenanceRequest implements ShouldBeUnique, ShouldQueue
         return $confidence >= (float) config('fixflow.triage.confidence.auto_route_min')
             ? RequestStatus::Triaged
             : RequestStatus::AwaitingApproval;
+    }
+
+    private function estimateCostUsd(array $meta): float
+    {
+        $perMillion = config('fixflow.llm.cost_per_million_tokens');
+
+        $input = ($meta['input_tokens'] ?? 0) * ($perMillion['input'] ?? 0) / 1_000_000;
+        $output = ($meta['output_tokens'] ?? 0) * ($perMillion['output'] ?? 0) / 1_000_000;
+
+        return round($input + $output, 6);
     }
 }
