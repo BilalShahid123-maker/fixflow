@@ -41,4 +41,9 @@ class WorkOrder extends Model
     {
         return $this->belongsTo(Contractor::class);
     }
+
+    public function approvedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'approved_by');
+    }
 }

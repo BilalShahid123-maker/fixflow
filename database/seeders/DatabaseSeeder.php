@@ -2,9 +2,12 @@
 
 namespace Database\Seeders;
 
-use App\Enums\RequestStatus;
+use App\Enums\IssueCategory;
 use App\Enums\RequestStatus;
 use App\Jobs\ProcessMaintenanceRequest;
+use App\Models\Contractor;
+use App\Models\ContractorAvailability;
+use App\Models\ContractorService;
 use App\Models\KnowledgeDocument;
 use App\Models\MaintenanceRequest;
 use App\Models\Property;
@@ -63,7 +66,26 @@ class DatabaseSeeder extends Seeder
 
         $this->command?->info("Seeded admin [{$admin->email}] with password 'password' and ".count($requests).' demo requests.');
 
+        $this->seedContractors();
         $this->seedKnowledge();
+    }
+
+    private function seedContractors(): void
+    {
+        $plumber = Contractor::create(['name' => 'Raj Patel', 'company' => 'Patel Plumbing Co.', 'phone' => '555-0101', 'email' => 'raj@patelplumbing.test', 'is_verified' => true, 'rating' => 4.8]);
+        ContractorService::create(['contractor_id' => $plumber->getKey(), 'trade' => IssueCategory::Plumbing, 'base_cost_cents' => 15000, 'hourly_rate_cents' => 8500]);
+        ContractorAvailability::create(['contractor_id' => $plumber->getKey(), 'starts_at' => now()->addDays(1)->setTime(9, 0), 'ends_at' => now()->addDays(1)->setTime(12, 0)]);
+        ContractorAvailability::create(['contractor_id' => $plumber->getKey(), 'starts_at' => now()->addDays(2)->setTime(13, 0), 'ends_at' => now()->addDays(2)->setTime(17, 0)]);
+
+        $electrician = Contractor::create(['name' => 'Sara Chen', 'company' => 'Chen Electric', 'phone' => '555-0202', 'email' => 'sara@chenelectric.test', 'is_verified' => true, 'rating' => 4.9]);
+        ContractorService::create(['contractor_id' => $electrician->getKey(), 'trade' => IssueCategory::Electrical, 'base_cost_cents' => 20000, 'hourly_rate_cents' => 9500]);
+        ContractorAvailability::create(['contractor_id' => $electrician->getKey(), 'starts_at' => now()->addDays(1)->setTime(10, 0), 'ends_at' => now()->addDays(1)->setTime(14, 0)]);
+
+        $hvac = Contractor::create(['name' => 'Tom Rivera', 'company' => 'Rivera HVAC Services', 'phone' => '555-0303', 'email' => 'tom@riverahvac.test', 'is_verified' => true, 'rating' => 4.5]);
+        ContractorService::create(['contractor_id' => $hvac->getKey(), 'trade' => IssueCategory::Hvac, 'base_cost_cents' => 25000, 'hourly_rate_cents' => 11000]);
+        ContractorAvailability::create(['contractor_id' => $hvac->getKey(), 'starts_at' => now()->addDays(3)->setTime(8, 0), 'ends_at' => now()->addDays(3)->setTime(12, 0)]);
+
+        $this->command?->info('Seeded 3 contractors (plumbing, electrical, HVAC) with availability.');
     }
 
     private function seedKnowledge(): void

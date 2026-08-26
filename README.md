@@ -81,7 +81,7 @@ Covers: automatic routing of confident triages, human-review routing of vague on
 - [x] Week 3 — real LLM driver behind the `TriageAgent` contract (Prism PHP, structured output + confidence clamping)
 - [x] Week 4 — manager dashboard (Filament): review queue, AI triage card, approve/reject with audit trail
 - [x] Week 5 — knowledge base + embeddings + RAG answers with citations
-- [ ] Week 6–7 — contractor matching tools + work order dispatch flow
+- [x] Week 6–7 — contractor matching tools + work order dispatch flow
 - [ ] Week 8 — evaluation suite: labeled dataset, accuracy/severity/critical-recall metrics
 - [ ] Week 9 — security pass, failure-mode documentation, cost dashboard
 - [ ] Week 10 — deployment, demo video, MCP server exposure
@@ -102,6 +102,8 @@ Covers: automatic routing of confident triages, human-review routing of vague on
 | 10 | Filament pinned to ^3.3 | v3 APIs are stable and fully documented; review actions delegate to framework-agnostic `ApproveReview`/`RejectReview` classes so business rules stay testable without Filament |
 | 11 | RAG: brute-force cosine similarity over PHP arrays, embeddings swapped per driver (fake/LLM) | Fast enough for <10k chunks; pgvector when scaling |
 | 12 | Fake embeddings produce deterministic vectors (md5-based) so tests are reproducible without API keys | Only the LLM embedding driver produces semantically meaningful results |
+| 13 | MatchContractor returns a MatchResult DTO (not a raw model) so downstream actions get service, slot and score in one query | Avoids N+1 lookups in the dispatch flow |
+| 14 | WorkOrder approval is always human (Filament action) — the AI creates a draft, a person dispatches | No contractor is ever contacted without explicit approval |
 
 ## Quick start
 

@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\MaintenanceRequestResource\Pages;
 
 use App\Actions\ApproveReview;
+use App\Actions\MatchContractor;
 use App\Actions\RejectReview;
 use App\Enums\RequestStatus;
 use App\Filament\Resources\MaintenanceRequestResource;
@@ -12,6 +13,7 @@ use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\Section;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Infolists\Infolist;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Support\Colors\Color;
 
@@ -107,6 +109,30 @@ class ViewMaintenanceRequest extends ViewRecord
                 ->requiresConfirmation()
                 ->visible(fn () => $this->getRecord()->status === RequestStatus::AwaitingApproval)
                 ->action(fn () => app(RejectReview::class)->execute($this->getRecord(), auth()->id())),
+            Action::make('match_contractor')
+                ->label('Match contractor')
+                ->icon('heroicon-o-user-group')
+                ->color(Color::Indigo)
+                ->requiresConfirmation()
+                ->modalHeading('Match a contractor')
+                ->modalSubmitActionLabel('Find & create work order')
+                ->visible(fn () => in_array($this->getRecord()->status, [RequestStatus::Triaged, RequestStatus::Approved]))
+                ->action(function ($record) {
+                    $workOrder = app(MatchContractor::class)->execute($record);
+
+                    if ($workOrder !== null) {
+                        Notification::make()
+                            ->title("Matched {$workOrder->contractor->name}")
+                            ->body("Work order #{$workOrder->getKey()} created. Review and approve to dispatch.")
+                            ->success()
+                            ->send();
+                    } else {
+                        Notification::make()
+                            ->title('No matching contractor found')
+                            ->warning()
+                            ->send();
+                    }
+                }),
         ];
     }
 }

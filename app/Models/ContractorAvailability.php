@@ -7,6 +7,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ContractorAvailability extends Model
 {
+    protected $table = 'contractor_availability';
+
     protected $fillable = [
         'contractor_id',
         'starts_at',
