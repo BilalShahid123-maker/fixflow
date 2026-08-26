@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\AI\RAG\KnowledgeIngestion;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -32,5 +33,15 @@ class KnowledgeDocument extends Model
     public function scopePublished(Builder $query): Builder
     {
         return $query->where('is_published', true);
+    }
+
+    public function ingest(): int
+    {
+        return app(KnowledgeIngestion::class)->ingestDocument($this);
+    }
+
+    public function reIngest(): int
+    {
+        return app(KnowledgeIngestion::class)->reIngestDocument($this);
     }
 }

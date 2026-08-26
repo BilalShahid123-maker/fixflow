@@ -4,8 +4,11 @@ namespace App\AI\Agents;
 
 use App\AI\Contracts\TriageAgent;
 use App\AI\Dto\TriageResult;
+use App\AI\RAG\EmbeddingService;
+use App\AI\RAG\VectorSearch;
 use App\Enums\IssueCategory;
 use App\Enums\Severity;
+use App\Models\KnowledgeChunk;
 use App\Models\MaintenanceRequest;
 use Prism\Prism\Facades\Prism;
 use Prism\Prism\Schema\BooleanSchema;
@@ -31,8 +34,15 @@ class LlmTriageAgent implements TriageAgent
         - reasoning: one sentence citing the words that drove the decision. Never invent facts.
         TXT;
 
+    public function __construct(
+        private ?EmbeddingService $embeddingService = null,
+        private ?VectorSearch $vectorSearch = null,
+    ) {}
+
     public function triage(MaintenanceRequest $request): TriageResult
     {
+        $rag = $this->retrieveKnowledgeContext($request);
+
         $response = Prism::structured()
             ->using(
                 (string) config('fixflow.llm.provider'),
@@ -40,7 +50,7 @@ class LlmTriageAgent implements TriageAgent
             )
             ->withSystemPrompt(self::SYSTEM_PROMPT)
             ->withSchema($this->schema())
-            ->withPrompt($this->buildPrompt($request))
+            ->withPrompt($this->buildPrompt($request, $rag))
             ->withMaxTokens(500)
             ->asStructured();
 
@@ -63,6 +73,7 @@ class LlmTriageAgent implements TriageAgent
                 'input_tokens' => $response->usage->promptTokens,
                 'output_tokens' => $response->usage->completionTokens,
                 'finish_reason' => $response->finishReason->value,
+                'rag_citations' => $rag['citations'] ?? [],
             ],
         );
     }
@@ -83,15 +94,77 @@ class LlmTriageAgent implements TriageAgent
         );
     }
 
-    private function buildPrompt(MaintenanceRequest $request): string
+    private function retrieveKnowledgeContext(MaintenanceRequest $request): array
     {
-        return sprintf(
+        if ($this->embeddingService === null || $this->vectorSearch === null) {
+            return ['context' => '', 'citations' => []];
+        }
+
+        $query = trim($request->title.' '.$request->description);
+        $queryEmbedding = $this->embeddingService->embed([$query])[0] ?? null;
+
+        if ($queryEmbedding === null || $queryEmbedding === []) {
+            return ['context' => '', 'citations' => []];
+        }
+
+        $chunks = KnowledgeChunk::query()
+            ->whereNotNull('embedding')
+            ->with('document')
+            ->get()
+            ->map(fn (KnowledgeChunk $chunk) => [
+                'chunk_id' => $chunk->getKey(),
+                'document_id' => $chunk->knowledge_document_id,
+                'title' => $chunk->document->title ?? '',
+                'section' => $chunk->metadata['section'] ?? null,
+                'content' => $chunk->content,
+                'embedding' => $chunk->embedding,
+            ])
+            ->all();
+
+        $topK = (int) config('fixflow.rag.search.top_k', 3);
+        $minScore = (float) config('fixflow.rag.search.min_score', 0.0);
+
+        $results = $this->vectorSearch->search($queryEmbedding, $chunks, $topK, $minScore);
+
+        if ($results === []) {
+            return ['context' => '', 'citations' => []];
+        }
+
+        $context = "\n\nRelevant maintenance knowledge:\n";
+        $citations = [];
+
+        foreach ($results as $i => $result) {
+            $label = $i + 1;
+            $section = $result['section'] ? " — {$result['section']}" : '';
+            $context .= "[{$label}] {$result['title']}{$section}\n{$result['content']}\n\n";
+
+            $citations[] = [
+                'document_id' => $result['document_id'],
+                'chunk_id' => $result['chunk_id'],
+                'title' => $result['title'],
+                'section' => $result['section'],
+                'score' => $result['score'],
+            ];
+        }
+
+        return ['context' => $context, 'citations' => $citations];
+    }
+
+    private function buildPrompt(MaintenanceRequest $request, array $rag): string
+    {
+        $base = sprintf(
             "Title: %s\nDescription: %s\nUnit: %s\nProperty: %s",
             $request->title,
             $request->description,
             $request->unit?->label ?? 'unknown',
             $request->unit?->property?->name ?? 'unknown',
         );
+
+        if ($rag['context'] !== '') {
+            $base .= $rag['context'];
+        }
+
+        return $base;
     }
 
     private function mapCategory(mixed $value): IssueCategory

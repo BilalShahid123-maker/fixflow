@@ -47,7 +47,9 @@ app/
 │   ├── Agents/FakeTriageAgent.php    deterministic driver, zero API keys needed
 │   ├── Contracts/TriageAgent.php     swap in a real LLM driver behind one interface
 │   ├── Dto/                          TriageResult, DispatchProposal (readonly)
-│   └── Permissions/                  PermissionGate + PermissionDecision
+│   ├── Permissions/                  PermissionGate + PermissionDecision
+│   └── RAG/                          TextSplitter, EmbeddingService, VectorSearch,
+│                                     KnowledgeIngestion (fake + Prism LLM drivers)
 ├── Enums/                            RequestStatus, Severity, IssueCategory,
 │                                     ActionStatus, ApprovalStatus, AuthorityLevel
 ├── Jobs/ProcessMaintenanceRequest.php queued triage with retries + idempotency
@@ -71,14 +73,14 @@ The pipeline runs entirely offline via the fake driver:
 php artisan test
 ```
 
-Covers: automatic routing of confident triages, human-review routing of vague ones, retry idempotency, and all four permission-gate branches (execute granted, cost limit, critical severity, unverified contractor).
+Covers: automatic routing of confident triages, human-review routing of vague ones, retry idempotency, all four permission-gate branches, knowledge chunking/embedding/search, vector-search top-k + min-score filtering, review action audit trails, and end-to-end RAG citation retrieval.
 
 ## Roadmap
 
 - [x] Week 1–2 — domain schema, models, enums, queued triage pipeline, permission gate
 - [x] Week 3 — real LLM driver behind the `TriageAgent` contract (Prism PHP, structured output + confidence clamping)
 - [x] Week 4 — manager dashboard (Filament): review queue, AI triage card, approve/reject with audit trail
-- [ ] Week 5 — knowledge base + embeddings + RAG answers with citations
+- [x] Week 5 — knowledge base + embeddings + RAG answers with citations
 - [ ] Week 6–7 — contractor matching tools + work order dispatch flow
 - [ ] Week 8 — evaluation suite: labeled dataset, accuracy/severity/critical-recall metrics
 - [ ] Week 9 — security pass, failure-mode documentation, cost dashboard
@@ -98,6 +100,8 @@ Covers: automatic routing of confident triages, human-review routing of vague on
 | 8 | LLM output defensively parsed (enum `tryFrom`, confidence clamped to ≤0.97) | The model can hallucinate enum values or overclaim certainty; the driver treats model output like untrusted input |
 | 9 | Token usage flows through `TriageResult->meta`, cost estimated per million-token rates in config | Cost telemetry belongs in `ai_runs` from day one, not retrofitted later |
 | 10 | Filament pinned to ^3.3 | v3 APIs are stable and fully documented; review actions delegate to framework-agnostic `ApproveReview`/`RejectReview` classes so business rules stay testable without Filament |
+| 11 | RAG: brute-force cosine similarity over PHP arrays, embeddings swapped per driver (fake/LLM) | Fast enough for <10k chunks; pgvector when scaling |
+| 12 | Fake embeddings produce deterministic vectors (md5-based) so tests are reproducible without API keys | Only the LLM embedding driver produces semantically meaningful results |
 
 ## Quick start
 
@@ -105,11 +109,13 @@ Covers: automatic routing of confident triages, human-review routing of vague on
 composer install
 cp .env.example .env
 php artisan key:generate
-php artisan migrate --seed     # seeds admin + demo requests through the real triage pipeline
+php artisan migrate --seed     # seeds admin, knowledge docs (embedded via fake driver), and triaged demo requests
 php artisan serve
 ```
 
 Log in at `/admin` with `admin@fixflow.test` / `password`. Requests are triaged by the deterministic fake driver by default; set `FIXFLOW_TRIAGE_DRIVER=llm` plus an `ANTHROPIC_API_KEY` to switch to Claude via Prism. Run the worker with `php artisan queue:work` when not using the sync driver.
+
+To re-embed the knowledge base with a real embedding provider: `FIXFLOW_EMBEDDING_DRIVER=llm php artisan knowledge:ingest --fresh`.
 
 ## License
 

@@ -32,4 +32,24 @@ return [
 
         'block_on_severities' => ['critical'],
     ],
+
+    'rag' => [
+
+        'embedding' => [
+            'driver' => env('FIXFLOW_EMBEDDING_DRIVER', 'fake'),
+            'provider' => env('FIXFLOW_EMBEDDING_PROVIDER', 'openai'),
+            'model' => env('FIXFLOW_EMBEDDING_MODEL', 'text-embedding-3-small'),
+            'dimensions' => (int) env('FIXFLOW_EMBEDDING_DIMENSIONS', 1536),
+        ],
+
+        'chunk' => [
+            'size' => (int) env('FIXFLOW_RAG_CHUNK_SIZE', 500),
+            'overlap' => (int) env('FIXFLOW_RAG_CHUNK_OVERLAP', 50),
+        ],
+
+        'search' => [
+            'top_k' => (int) env('FIXFLOW_RAG_TOP_K', 3),
+            'min_score' => (float) env('FIXFLOW_RAG_MIN_SCORE', 0.0),
+        ],
+    ],
 ];
