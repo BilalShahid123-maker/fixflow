@@ -75,6 +75,23 @@ php artisan test
 
 Covers: automatic routing of confident triages, human-review routing of vague ones, retry idempotency, all four permission-gate branches, knowledge chunking/embedding/search, vector-search top-k + min-score filtering, review action audit trails, and end-to-end RAG citation retrieval.
 
+## Evaluation
+
+A labeled eval set + metrics harness proves how well the triage agent actually performs — the key portfolio metric.
+
+```bash
+php artisan eval:run --split=all
+```
+
+Every case is prefixed with a human-labeled ground truth (category, severity, emergency). The runner drives the active `TriageAgent` over the set, records each prediction against an `ai_run`, and reports:
+
+- **Category accuracy** — exact trade-category match rate
+- **Severity accuracy** — exact urgency match rate
+- **Critical recall** — % of true emergencies the agent correctly flags (the safety-critical number)
+- **Average confidence** — calibration signal
+
+Baseline with the deterministic fake driver over the curated 20-case set: ~75% category, ~65% severity, 100% critical recall. Swap to the LLM driver (`FIXFLOW_TRIAGE_DRIVER=llm`) to measure the real model; results land in `eval_runs` and show on the dashboard's `EvalMetricsWidget`.
+
 ## Roadmap
 
 - [x] Week 1–2 — domain schema, models, enums, queued triage pipeline, permission gate
@@ -82,7 +99,7 @@ Covers: automatic routing of confident triages, human-review routing of vague on
 - [x] Week 4 — manager dashboard (Filament): review queue, AI triage card, approve/reject with audit trail
 - [x] Week 5 — knowledge base + embeddings + RAG answers with citations
 - [x] Week 6–7 — contractor matching tools + work order dispatch flow
-- [ ] Week 8 — evaluation suite: labeled dataset, accuracy/severity/critical-recall metrics
+- [x] Week 8 — evaluation suite: labeled dataset, accuracy/severity/critical-recall metrics
 - [ ] Week 9 — security pass, failure-mode documentation, cost dashboard
 - [ ] Week 10 — deployment, demo video, MCP server exposure
 
@@ -104,6 +121,7 @@ Covers: automatic routing of confident triages, human-review routing of vague on
 | 12 | Fake embeddings produce deterministic vectors (md5-based) so tests are reproducible without API keys | Only the LLM embedding driver produces semantically meaningful results |
 | 13 | MatchContractor returns a MatchResult DTO (not a raw model) so downstream actions get service, slot and score in one query | Avoids N+1 lookups in the dispatch flow |
 | 14 | WorkOrder approval is always human (Filament action) — the AI creates a draft, a person dispatches | No contractor is ever contacted without explicit approval |
+| 15 | Eval cases are a separate labeled table (human ground truth), evaluated against `ai_runs` predictions | Keeps eval data independent of production requests and lets the split (train/eval/holdout) be managed in SQL |
 
 ## Quick start
 

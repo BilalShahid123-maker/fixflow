@@ -68,6 +68,7 @@ class DatabaseSeeder extends Seeder
 
         $this->seedContractors();
         $this->seedKnowledge();
+        $this->call(EvalDatasetSeeder::class);
     }
 
     private function seedContractors(): void
