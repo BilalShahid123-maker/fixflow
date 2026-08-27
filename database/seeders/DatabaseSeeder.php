@@ -22,7 +22,7 @@ class DatabaseSeeder extends Seeder
     {
         $admin = User::firstOrCreate(
             ['email' => 'admin@fixflow.test'],
-            ['name' => 'Property Manager', 'password' => 'password'],
+            ['name' => 'Property Manager', 'password' => 'password', 'is_admin' => true],
         );
 
         $property = Property::create([

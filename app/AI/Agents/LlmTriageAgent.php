@@ -6,6 +6,7 @@ use App\AI\Contracts\TriageAgent;
 use App\AI\Dto\TriageResult;
 use App\AI\RAG\EmbeddingService;
 use App\AI\RAG\VectorSearch;
+use App\AI\Safety\PromptSafety;
 use App\Enums\IssueCategory;
 use App\Enums\Severity;
 use App\Models\KnowledgeChunk;
@@ -152,12 +153,17 @@ class LlmTriageAgent implements TriageAgent
 
     private function buildPrompt(MaintenanceRequest $request, array $rag): string
     {
+        $untrusted = sprintf(
+            "Title: %s\nDescription: %s",
+            PromptSafety::sanitizeForStorage($request->title),
+            PromptSafety::sanitizeForStorage($request->description),
+        );
+
         $base = sprintf(
-            "Title: %s\nDescription: %s\nUnit: %s\nProperty: %s",
-            $request->title,
-            $request->description,
+            "Unit: %s\nProperty: %s\n%s",
             $request->unit?->label ?? 'unknown',
             $request->unit?->property?->name ?? 'unknown',
+            PromptSafety::encloseUntrusted($untrusted),
         );
 
         if ($rag['context'] !== '') {

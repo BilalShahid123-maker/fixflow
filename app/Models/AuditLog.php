@@ -16,6 +16,7 @@ class AuditLog extends Model
         'subject_type',
         'subject_id',
         'properties',
+        'created_at',
     ];
 
     protected function casts(): array

@@ -9,6 +9,10 @@ use App\AI\RAG\EmbeddingService;
 use App\AI\RAG\FakeEmbeddingService;
 use App\AI\RAG\LlmEmbeddingService;
 use App\AI\RAG\VectorSearch;
+use App\Models\MaintenanceRequest;
+use App\Policies\MaintenanceRequestPolicy;
+use Illuminate\Contracts\Auth\Access\Gate;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\ServiceProvider;
 use InvalidArgumentException;
 
@@ -39,6 +43,11 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        //
+        Model::shouldBeStrict(! app()->isProduction());
+
+        $this->app->make(Gate::class)->policy(
+            MaintenanceRequest::class,
+            MaintenanceRequestPolicy::class,
+        );
     }
 }

@@ -92,6 +92,27 @@ Every case is prefixed with a human-labeled ground truth (category, severity, em
 
 Baseline with the deterministic fake driver over the curated 20-case set: ~75% category, ~65% severity, 100% critical recall. Swap to the LLM driver (`FIXFLOW_TRIAGE_DRIVER=llm`) to measure the real model; results land in `eval_runs` and show on the dashboard's `EvalMetricsWidget`.
 
+## Security
+
+The core posture: **LLM output and tenant input are both untrusted.**
+
+- **Prompt injection** — tenant title/description are wrapped in `<<<UNTRUSTED_TENANT_INPUT>>>` delimiters by `PromptSafety::encloseUntrusted()` and marked as data, never instructions. Even if the model is coaxed into misclassifying, the `PermissionGate` still enforces authority in deterministic PHP, so no injected instruction can grant permission.
+- **Authorization** — a `MaintenanceRequestPolicy` gates review/dispatch to admins (`is_admin`). Strict Eloquent mode is enabled in dev/test so accidental mass assignment throws instead of silently dropping.
+- **Untrusted persistence** — `PromptSafety::sanitizeForStorage()` strips null bytes and control characters before text is stored/displayed.
+
+## Failure modes
+
+| Failure | Behavior | Recovers by |
+|---|---|---|
+| LLM call times out / errors | `AiRun` marked `failed`, audit `ai.triage.failed` written | `ProcessMaintenanceRequest` retries (3, backoff 10/30s); exhausted → audit `ai.triage.exhausted_retries`, request stays `PendingTriage` |
+| Duplicate processing / retry | job is `ShouldBeUnique` + status guard → safe to retry | no double-triage; idempotent |
+| LLM returns invalid enum | `tryFrom` throws; run fails and retries | same retry path |
+| LLM overclaims confidence | clamped to ≤0.97 in code | safer thresholds |
+| Injection phrase in tenant text | delimited + gate still enforced | blocked regardless of model behavior |
+| Unknown triage driver | `AppServiceProvider` throws clear exception at boot | misconfig fails fast, no silent fallback |
+| No matching contractor | `dispatch.match_failed` audited, request stays `Triaged` | manager can add/verify a contractor and retry |
+| Non-admin action | `MaintenanceRequestPolicy` denies | 403 |
+
 ## Roadmap
 
 - [x] Week 1–2 — domain schema, models, enums, queued triage pipeline, permission gate
@@ -100,7 +121,7 @@ Baseline with the deterministic fake driver over the curated 20-case set: ~75% c
 - [x] Week 5 — knowledge base + embeddings + RAG answers with citations
 - [x] Week 6–7 — contractor matching tools + work order dispatch flow
 - [x] Week 8 — evaluation suite: labeled dataset, accuracy/severity/critical-recall metrics
-- [ ] Week 9 — security pass, failure-mode documentation, cost dashboard
+- [x] Week 9 — security pass, failure-mode documentation, cost dashboard
 - [ ] Week 10 — deployment, demo video, MCP server exposure
 
 ## Decision log
@@ -122,6 +143,8 @@ Baseline with the deterministic fake driver over the curated 20-case set: ~75% c
 | 13 | MatchContractor returns a MatchResult DTO (not a raw model) so downstream actions get service, slot and score in one query | Avoids N+1 lookups in the dispatch flow |
 | 14 | WorkOrder approval is always human (Filament action) — the AI creates a draft, a person dispatches | No contractor is ever contacted without explicit approval |
 | 15 | Eval cases are a separate labeled table (human ground truth), evaluated against `ai_runs` predictions | Keeps eval data independent of production requests and lets the split (train/eval/holdout) be managed in SQL |
+| 16 | Strict Eloquent mode enabled in dev/test | Forces mass-assignment violations to throw during development rather than silently stripping fields |
+| 17 | Prompt injection handled at two layers — delimiting untrusted input AND an independent PHP permission gate | Defense in depth: the model is only as smart as the prompt, but authority is guaranteed by code |
 
 ## Quick start
 

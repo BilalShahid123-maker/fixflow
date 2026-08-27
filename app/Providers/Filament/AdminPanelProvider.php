@@ -2,6 +2,7 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Widgets\CostStatsWidget;
 use App\Filament\Widgets\EvalMetricsWidget;
 use App\Filament\Widgets\TriageStatsWidget;
 use Filament\Http\Middleware\Authenticate;
@@ -40,6 +41,7 @@ class AdminPanelProvider extends PanelProvider
             ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\\Filament\\Widgets')
             ->widgets([
                 TriageStatsWidget::class,
+                CostStatsWidget::class,
                 EvalMetricsWidget::class,
             ])
             ->middleware([
