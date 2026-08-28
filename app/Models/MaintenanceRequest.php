@@ -24,6 +24,7 @@ class MaintenanceRequest extends Model
         'emergency',
         'triaged_at',
         'completed_at',
+        'reference',
     ];
 
     protected function casts(): array
@@ -61,7 +62,7 @@ class MaintenanceRequest extends Model
 
     public function latestAiRun(): ?AiRun
     {
-        return $this->aiRuns()->latestOfMany();
+        return $this->aiRuns()->latest('id')->first();
     }
 
     public function workOrders(): HasMany

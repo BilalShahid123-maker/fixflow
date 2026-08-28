@@ -6,6 +6,11 @@ A property manager with 200 units receives tenant requests all day: "water leaki
 
 **The AI never sends anyone or spends money on its own.**
 
+**Three surfaces:**
+- **Tenant portal** (`/`, `/submit`) — a public form drops a request into the triage queue; a `/status/{reference}` page shows live pipeline state without any login.
+- **Manager panel** (`/admin`, Filament) — review queue, AI triage card, approve/reject with audit trail, work order dispatch, cost + eval dashboards.
+- **MCP server** (`bin/fixflow-mcp`) — the same FixFlow capabilities exposed as LLM tools over stdio (Model Context Protocol), so an assistant can submit and track requests directly.
+
 ## Problem statement
 
 Small and mid-size property managers handle maintenance through phone calls, texts and spreadsheets:
@@ -57,6 +62,10 @@ app/
                                       WorkOrder, Contractor*, Knowledge*,
                                       AiRun, AiAction, Approval, AuditLog
 config/fixflow.php                     thresholds live here, not in prompts
+bin/fixflow-mcp                        stdio MCP server exposing FixFlow tools
+app/Mcp/FixFlowMcpServer.php           JSON-RPC 2.0 over stdio, tools = web actions
+app/Http/Controllers/MaintenancePortalController.php  tenant submit + status
+routes/web.php                         tenant portal routes (/, /submit, /status/{request})
 ```
 
 Key decisions baked into the skeleton:
@@ -73,7 +82,7 @@ The pipeline runs entirely offline via the fake driver:
 php artisan test
 ```
 
-Covers: automatic routing of confident triages, human-review routing of vague ones, retry idempotency, all four permission-gate branches, knowledge chunking/embedding/search, vector-search top-k + min-score filtering, review action audit trails, and end-to-end RAG citation retrieval.
+Covers: automatic routing of confident triages, human-review routing of vague ones, retry idempotency, all four permission-gate branches, knowledge chunking/embedding/search, vector-search top-k + min-score filtering, review action audit trails, end-to-end RAG citation retrieval, the tenant portal submission → triage flow, and the MCP server's JSON-RPC handshake/tools/validation.
 
 ## Evaluation
 
@@ -122,7 +131,44 @@ The core posture: **LLM output and tenant input are both untrusted.**
 - [x] Week 6–7 — contractor matching tools + work order dispatch flow
 - [x] Week 8 — evaluation suite: labeled dataset, accuracy/severity/critical-recall metrics
 - [x] Week 9 — security pass, failure-mode documentation, cost dashboard
-- [ ] Week 10 — deployment, demo video, MCP server exposure
+- [x] Week 10 — tenant portal, deployment guide (`docs/DEPLOYMENT.md`), demo runbook (`docs/DEMO.md`), MCP server exposure (`bin/fixflow-mcp`)
+
+## Public interface
+
+### Tenant portal
+
+```bash
+php artisan serve
+# http://127.0.0.1:8000/            landing + submit form
+# http://127.0.0.1:8000/submit     tenant reports an issue
+# /status/{REFERENCE}              live pipeline status (no login)
+```
+
+Submission validates, resolves-or-creates the tenant, writes a request with a public `reference`, and queues `ProcessMaintenanceRequest`. With `QUEUE_CONNECTION=sync` the triage completes inline; otherwise a worker processes it.
+
+### MCP server
+
+FixFlow speaks the [Model Context Protocol](https://modelcontextprotocol.io) over stdio — the tool interface used by Claude Desktop, Cursor and other AI client apps.
+
+```bash
+# protocol smoke test / handshake:
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26"}}' | php bin/fixflow-mcp
+
+# wire into a client (e.g. Claude Desktop config):
+# {"mcpServers":{"fixflow":{"command":"php","args":["<project>/bin/fixflow-mcp"]}}}
+```
+
+Registered tools:
+
+| Tool | Purpose |
+|---|---|
+| `submit_maintenance_request` | Create a tenant request → enters triage pipeline, returns reference |
+| `list_maintenance_requests` | Filter request inbox by status |
+| `get_maintenance_request` | Full detail incl. triage assessment, work order + contractor |
+| `list_work_orders` | Dispatched/draft work orders with contractor + cost |
+| `list_properties` | Properties + units so a client can submit against real IDs |
+
+Every tool writes through the same actions/validation the web app uses, so authority and audit guarantees hold regardless of surface.
 
 ## Decision log
 
@@ -145,6 +191,9 @@ The core posture: **LLM output and tenant input are both untrusted.**
 | 15 | Eval cases are a separate labeled table (human ground truth), evaluated against `ai_runs` predictions | Keeps eval data independent of production requests and lets the split (train/eval/holdout) be managed in SQL |
 | 16 | Strict Eloquent mode enabled in dev/test | Forces mass-assignment violations to throw during development rather than silently stripping fields |
 | 17 | Prompt injection handled at two layers — delimiting untrusted input AND an independent PHP permission gate | Defense in depth: the model is only as smart as the prompt, but authority is guaranteed by code |
+| 18 | Tenant status page keyed on an opaque `reference` token instead of `id` | Direct object references are enumeration targets; a random 8-char token is unguessable and still route-model-bound via `routeKeyName()` |
+| 19 | FixFlow exposed as an MCP stdio server (`bin/fixflow-mcp`) | A portfolio app should be operatable by AI clients the same way a human operates it — MCP is the ecosystem-standard wire protocol |
+| 20 | Portal views are plain Blade + inline CSS, no Vite build | The repo ships without committed assets; the portal must render after `composer install` alone and be trivially re-skinable |
 
 ## Quick start
 
@@ -157,6 +206,8 @@ php artisan serve
 ```
 
 Log in at `/admin` with `admin@fixflow.test` / `password`. Requests are triaged by the deterministic fake driver by default; set `FIXFLOW_TRIAGE_DRIVER=llm` plus an `ANTHROPIC_API_KEY` to switch to Claude via Prism. Run the worker with `php artisan queue:work` when not using the sync driver.
+
+Tenant customers open `/submit` to file a request and receive a reference for `/status/{reference}`. A full scripted tour lives in `docs/DEMO.md`; production notes and a `.env` table are in `docs/DEPLOYMENT.md`.
 
 To re-embed the knowledge base with a real embedding provider: `FIXFLOW_EMBEDDING_DRIVER=llm php artisan knowledge:ingest --fresh`.
 

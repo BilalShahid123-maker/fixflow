@@ -1,0 +1,19 @@
+#!/usr/bin/env php
+<?php
+
+use App\Mcp\FixFlowMcpServer;
+use Illuminate\Contracts\Console\Kernel;
+
+error_reporting(E_ALL & ~E_DEPRECATED & ~E_USER_DEPRECATED);
+
+// Protocol must be the only thing on stdout; route framework output to stderr.
+ini_set('display_errors', 'stderr');
+
+require __DIR__.'/../vendor/autoload.php';
+
+$app = require __DIR__.'/../bootstrap/app.php';
+
+$kernel = $app->make(Kernel::class);
+$kernel->bootstrap();
+
+(new FixFlowMcpServer())->run();

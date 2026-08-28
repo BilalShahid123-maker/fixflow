@@ -60,31 +60,31 @@ class ViewMaintenanceRequest extends ViewRecord
                     ]),
                     TextEntry::make('ai.reasoning')
                         ->label('Reasoning')
-                        ->state(fn ($record) => $record->latestAiRun?->output['reasoning'] ?? 'No AI run yet.')
+                        ->state(fn ($record) => $record->latestAiRun()?->output['reasoning'] ?? 'No AI run yet.')
                         ->prose()
                         ->columnSpanFull(),
                     Grid::make(4)->schema([
                         TextEntry::make('ai.model')
                             ->label('Model')
-                            ->state(fn ($record) => $record->latestAiRun?->model ?? '—'),
+                            ->state(fn ($record) => $record->latestAiRun()?->model ?? '—'),
                         TextEntry::make('ai.latency')
                             ->label('Latency')
                             ->state(function ($record) {
-                                $latency = $record->latestAiRun?->latency_ms;
+                                $latency = $record->latestAiRun()?->latency_ms;
 
                                 return $latency !== null ? $latency.' ms' : '—';
                             }),
                         TextEntry::make('ai.tokens')
                             ->label('Tokens (in/out)')
                             ->state(function ($record) {
-                                $run = $record->latestAiRun;
+                                $run = $record->latestAiRun();
 
                                 return $run !== null ? "{$run->input_tokens} / {$run->output_tokens}" : '—';
                             }),
                         TextEntry::make('ai.cost')
                             ->label('Est. cost')
                             ->state(function ($record) {
-                                $cost = $record->latestAiRun?->cost_usd;
+                                $cost = $record->latestAiRun()?->cost_usd;
 
                                 return $cost !== null ? '$'.number_format($cost, 5) : '—';
                             }),
